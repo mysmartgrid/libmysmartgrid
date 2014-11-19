@@ -19,268 +19,275 @@
  * along with libklio. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "webclient.h"
-#include "libmysmartgrid/error.h"
-#include <curl/curl.h>
 #include <sstream>
 #include <iomanip>
+#include <curl/curl.h>
 #include <openssl/hmac.h>
+#include "webclient.h"
+#include "libmysmartgrid/error.h"
 
 using namespace libmsg;
 
-Webclient::Webclient() {}
-Webclient::~Webclient() {}
+const std::string Webclient::GET = "GET";
+const std::string Webclient::POST = "POST";
+const std::string Webclient::DELETE = "DELETE";
 
 Secret Secret::fromKey(const std::string& key) {
-	Secret s;
-	s._type = SecretType::Key;
-	s._secret = key;
-	return s;
+
+    Secret s;
+    s._type = SecretType::Key;
+    s._secret = key;
+    return s;
 };
 
 Secret Secret::fromToken(const std::string& token) {
-	Secret s;
-	s._type = SecretType::Token;
-	s._secret = token;
-	return s;
+
+    Secret s;
+    s._type = SecretType::Token;
+    s._secret = token;
+    return s;
 };
 
 std::string Secret::key() const {
-	if (_type == SecretType::Key) {
-		return _secret;
-	}
-	throw GenericException("Key requested from secret that is no key");
+
+    if (_type == SecretType::Key) {
+        return _secret;
+    }
+    throw GenericException("Key requested from secret that is no key");
 }
 
 std::string Secret::token() const {
-	if (_type == SecretType::Token) {
-		return _secret;
-	}
-	throw GenericException("Token requested from secret that is no token");
+
+    if (_type == SecretType::Token) {
+        return _secret;
+    }
+    throw GenericException("Token requested from secret that is no token");
 }
 
-const std::string Webclient::digest_message(const std::string& data, const std::string& key)
-{
-	HMAC_CTX context;
-	HMAC_CTX_init(&context);
-	HMAC_Init_ex(&context, key.c_str(), key.length(), EVP_sha1(), NULL);
-	HMAC_Update(&context, (const unsigned char*) data.c_str(), data.length());
+const std::string Webclient::digest_message(const std::string& data, const std::string& key) {
 
-	unsigned char out[EVP_MAX_MD_SIZE];
-	unsigned int len = EVP_MAX_MD_SIZE;
+    HMAC_CTX context;
+    HMAC_CTX_init(&context);
+    HMAC_Init_ex(&context, key.c_str(), key.length(), EVP_sha1(), NULL);
+    HMAC_Update(&context, (const unsigned char*) data.c_str(), data.length());
 
-	HMAC_Final(&context, out, &len);
+    unsigned char out[EVP_MAX_MD_SIZE];
+    unsigned int len = EVP_MAX_MD_SIZE;
 
-	std::stringstream oss;
-	oss << std::hex;
-	for (size_t i = 0; i < len; i++) {
-		oss << std::setw(2) << std::setfill('0') << (unsigned int) out[i];
-	}
-	oss << std::dec;
+    HMAC_Final(&context, out, &len);
 
-	HMAC_CTX_cleanup(&context);
+    std::stringstream oss;
+    oss << std::hex;
+    for (size_t i = 0; i < len; i++) {
+        oss << std::setw(2) << std::setfill('0') << (unsigned int) out[i];
+    }
+    oss << std::dec;
 
-	return oss.str().substr(0, 255);
+    HMAC_CTX_cleanup(&context);
+
+    return oss.str().substr(0, 255);
 }
 
 /* Store curl responses in memory. Curl needs a custom callback for that. Otherwise it tries to write the response to a file. */
 size_t Webclient::curlWriteCustomCallback(char *ptr, size_t size, size_t nmemb, void *data) {
 
-	size_t realsize = size * nmemb;
-	std::string *response = static_cast<std::string *> (data);;
-
-	response->append(ptr, realsize);
-
-	return realsize;
+    size_t realsize = size * nmemb;
+    std::string *response = static_cast<std::string *> (data);
+    response->append(ptr, realsize);
+    return realsize;
 }
 
 Webclient::ReadingList Webclient::getReadings(const std::string& url, const std::string& id, const Secret& secret, const std::string& unit) {
-	libmsg::Webclient::ParamList p;
-	p["interval"] = "hour";
-	p["unit"] = unit;
-	std::string sensorUrl = libmsg::Webclient::composeSensorUrl(url, id, p);
-	libmsg::JsonPtr result = libmsg::Webclient::performHttpGet(sensorUrl , secret);
 
-	ReadingList readings;
-	for (auto it = result->begin(), end = result->end(); it != end; ++it) {
-		Json::Value timestamp = (*it)[0];
-		Json::Value value = (*it)[1];
-		if (value.isConvertibleTo(Json::realValue)) {
-			readings.push_back(std::make_pair(timestamp.asInt(), value.asDouble()));
-		}
-	}
+    Webclient::ParamList p;
+    p["interval"] = "hour";
+    p["unit"] = unit;
 
-	return readings;
+    std::string sensorUrl = Webclient::composeSensorUrl(url, id, p);
+    JsonPtr result = Webclient::performHttpGet(sensorUrl, secret);
+
+    ReadingList readings;
+    for (auto it = result->begin(), end = result->end(); it != end; ++it) {
+
+        Json::Value timestamp = (*it)[0];
+        Json::Value value = (*it)[1];
+        if (value.isConvertibleTo(Json::realValue)) {
+            readings.push_back(std::make_pair(timestamp.asInt(), value.asDouble()));
+        }
+    }
+    return readings;
 }
 
 Webclient::Reading Webclient::getLastReading(const std::string& url, const std::string& id, const Secret& secret, const std::string& unit) {
-	ReadingList list = getReadings(url, id, secret, unit);
-	// TODO: Do we have to ensure here that the list is sorted by ascending timestamp? Or is that guaranteed by the api?
-	auto it = list.rbegin(), end = list.rend();
-	while ( it != end && it->second == 0 )
-		it++;
 
-	if ( it != end ) {
-		return *it;
-	}
-	return std::make_pair(0, 0.0);
+    ReadingList list = getReadings(url, id, secret, unit);
+
+    // TODO: Do we have to ensure here that the list is sorted by ascending timestamp? Or is that guaranteed by the api?
+    auto it = list.rbegin(), end = list.rend();
+    while (it != end && it->second == 0) {
+        it++;
+    }
+
+    if (it != end) {
+        return *it;
+    }
+    return std::make_pair(0, 0.0);
 }
 
-JsonPtr Webclient::performHttpRequest(const std::string& method, const std::string& url, const Secret& secret, const JsonPtr& body)
-{
-	long int httpCode = 0;
-	CURLcode curlCode;
-	std::string response = "";
-	CURL *curl = nullptr;
-	Json::Value *jsonValue = new Json::Value();
-	curl_slist *headers = nullptr;
+JsonPtr Webclient::performHttpRequest(const std::string& method, const std::string& url, const Secret& secret, const JsonPtr& body) {
 
-	try {
-		curl_global_init(CURL_GLOBAL_DEFAULT);
-		curl = curl_easy_init();
-		if (!curl) {
-			throw EnvironmentException("CURL could not be initiated.");
-		}
+    long int httpCode = 0;
+    CURLcode curlCode;
+    std::string response = "";
+    CURL *curl = nullptr;
+    Json::Value *jsonValue = new Json::Value();
+    curl_slist *headers = nullptr;
 
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &response);
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteCustomCallback);
-		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-		curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
+    try {
+        curl_global_init(CURL_GLOBAL_DEFAULT);
+        curl = curl_easy_init();
+        if (!curl) {
+            throw EnvironmentException("CURL could not be initiated.");
+        }
 
-		//Activate this line to print requests and responses to the console
-		//curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &response);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteCustomCallback);
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
 
-		//Signal-handling is NOT thread-safe.
-		curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+        //Activate this line to print requests and responses to the console
+        //curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
 
-		//Required if next router has an ip-change.
-		curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
+        //Signal-handling is NOT thread-safe.
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
 
-		headers = curl_slist_append(headers, "User-Agent: libmysmartgrid");
-		headers = curl_slist_append(headers, "X-Version: 1.0");
-		headers = curl_slist_append(headers, "Accept: application/json,text/html");
+        //Required if next router has an ip-change.
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
 
-		std::string strbody;
-		if (!body->isNull()) {
-			Json::FastWriter w;
-			strbody = w.write(*body);
-		}
-		std::ostringstream oss;
-		if (secret.isKey()) {
-			oss << "X-Digest: " << digest_message(strbody, secret.key());
-		} else if (secret.isToken()) {
-			oss << "X-Token: " << secret.token();
-		}
-		headers = curl_slist_append(headers, oss.str().c_str());
+        headers = curl_slist_append(headers, "User-Agent: libmysmartgrid");
+        headers = curl_slist_append(headers, "X-Version: 1.0");
+        headers = curl_slist_append(headers, "Accept: application/json,text/html");
 
-		if (method == "POST") {
-			headers = curl_slist_append(headers, "Content-type: application/json");
+        std::string strbody;
+        if (!body->isNull()) {
+            Json::FastWriter w;
+            strbody = w.write(*body);
+        }
+        std::ostringstream oss;
+        if (secret.isKey()) {
+            oss << "X-Digest: " << digest_message(strbody, secret.key());
+        } else if (secret.isToken()) {
+            oss << "X-Token: " << secret.token();
+        }
+        headers = curl_slist_append(headers, oss.str().c_str());
 
-			oss.str(std::string());
-			oss << "Content-Length: " << strbody.length();
-			headers = curl_slist_append(headers, oss.str().c_str());
+        if (method == "POST") {
+            headers = curl_slist_append(headers, "Content-type: application/json");
 
-			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, strbody.c_str());
-		}
+            oss.str(std::string());
+            oss << "Content-Length: " << strbody.length();
+            headers = curl_slist_append(headers, oss.str().c_str());
 
-		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, strbody.c_str());
+        }
 
-		curlCode = curl_easy_perform(curl);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
-		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+        curlCode = curl_easy_perform(curl);
 
-		if (curlCode == CURLE_OK && httpCode == 200) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
 
-			bool ok;
-			Json::Reader r;
-			ok = r.parse(response, *jsonValue, false);
-			if (!ok) {
-				throw GenericException("Error parsing response: " + response);
-			}
+        if (curlCode == CURLE_OK && httpCode == 200) {
 
-			//Clean up
-			curl_slist_free_all(headers);
-			curl_easy_cleanup(curl);
-			curl_global_cleanup();
+            bool ok;
+            Json::Reader r;
+            ok = r.parse(response, *jsonValue, false);
+            if (!ok) {
+                throw GenericException("Error parsing response: " + response);
+            }
 
-			return boost::shared_ptr<Json::Value>(jsonValue);
+            //Clean up
+            curl_slist_free_all(headers);
+            curl_easy_cleanup(curl);
+            curl_global_cleanup();
 
-		} else {
-			oss.str(std::string());
-			oss << "HTTPS request failed." <<
-				" cURL Error: " << curl_easy_strerror(curlCode) << ". " <<
-				" HTTPS code: " << httpCode;
+            return boost::shared_ptr<Json::Value>(jsonValue);
 
-			if (httpCode >= 400 && httpCode <= 499) {
-				throw DataFormatException(oss.str());
+        } else {
+            oss.str(std::string());
+            oss << "HTTPS request failed." <<
+                    " cURL Error: " << curl_easy_strerror(curlCode) << ". " <<
+                    " HTTPS code: " << httpCode;
 
-			} else if (httpCode >= 500 || httpCode == 0 || httpCode == 200) {
-				throw CommunicationException(oss.str());
+            if (httpCode >= 400 && httpCode <= 499) {
+                throw DataFormatException(oss.str());
 
-			} else {
-				throw GenericException(oss.str());
-			}
-		}
+            } else if (httpCode >= 500 || httpCode == 0 || httpCode == 200) {
+                throw CommunicationException(oss.str());
 
-	} catch (std::exception const& e) {
+            } else {
+                throw GenericException(oss.str());
+            }
+        }
 
-		//Clean up
-		if (headers != nullptr) {
-			curl_slist_free_all(headers);
-		}
-		if (curl != nullptr) {
-			curl_easy_cleanup(curl);
-		}
-		curl_global_cleanup();
-		throw;
-	}
-	//Some compilers require a return here
-	throw GenericException("This point should never be reached.");
+    } catch (std::exception const& e) {
+
+        //Clean up
+        if (headers != nullptr) {
+            curl_slist_free_all(headers);
+        }
+        if (curl != nullptr) {
+            curl_easy_cleanup(curl);
+        }
+        curl_global_cleanup();
+        throw;
+    }
+    //Some compilers require a return here
+    throw GenericException("This point should never be reached.");
 }
 
-JsonPtr Webclient::performHttpGet(const std::string& url, const Secret& secret)
-{
-	return performHttpRequest("GET", url, secret);
+JsonPtr Webclient::performHttpGet(const std::string& url, const Secret& secret) {
+
+    return performHttpRequest(GET, url, secret);
 }
 
-JsonPtr Webclient::performHttpPost(const std::string& url, const Secret& secret, const JsonPtr& body)
-{
-	return performHttpRequest("POST", url, secret, body);
+JsonPtr Webclient::performHttpPost(const std::string& url, const Secret& secret, const JsonPtr& body) {
+
+    return performHttpRequest(POST, url, secret, body);
 }
 
-JsonPtr Webclient::performHttpDelete(const std::string& url, const Secret& secret)
-{
-	return performHttpRequest("DELETE", url, secret);
+JsonPtr Webclient::performHttpDelete(const std::string& url, const Secret& secret) {
+
+    return performHttpRequest(DELETE, url, secret);
 }
 
-const std::string Webclient::composeDeviceUrl(const std::string& url, const std::string& id)
-{
-	return composeUrl(url, std::string("device"), id);
+const std::string Webclient::composeDeviceUrl(const std::string& url, const std::string& id) {
+
+    return composeUrl(url, std::string("device"), id);
 }
 
-const std::string Webclient::composeSensorUrl(const std::string& url, const std::string& sensorId, const ParamList& params)
-{
-	std::stringstream oss;
-	const char* seperator = "";
+const std::string Webclient::composeSensorUrl(const std::string& url, const std::string& sensorId, const ParamList& params) {
 
-	for (auto it = params.begin(), end = params.end(); it != end; ++it)
-	{
-		oss << seperator << it->first << "=" << it->second;
-		seperator = "&";
-	}
+    std::stringstream oss;
+    const char* seperator = "";
 
-	return composeUrl(url, std::string("sensor"), sensorId, oss.str());
+    for (auto it = params.begin(), end = params.end(); it != end; ++it) {
+        oss << seperator << it->first << "=" << it->second;
+        seperator = "&";
+    }
+
+    return composeUrl(url, std::string("sensor"), sensorId, oss.str());
 }
 
-const std::string Webclient::composeUrl(const std::string& url, const std::string& object, const std::string& id, const std::string& query)
-{
-	std::ostringstream oss;
-	oss << url << "/" << object << "/" << id;
-	if (!query.empty())
-		oss << "?" << query;
+const std::string Webclient::composeUrl(const std::string& url, const std::string& object, const std::string& id, const std::string& query) {
 
-	return oss.str();
+    std::ostringstream oss;
+    oss << url << "/" << object << "/" << id;
+    if (!query.empty()) {
+        oss << "?" << query;
+    }
+    return oss.str();
 }
