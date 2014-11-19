@@ -20,10 +20,11 @@
  */
 
 #include <sstream>
-#include <iomanip>
 #include <curl/curl.h>
-#include <openssl/hmac.h>
 #include "webclient.h"
+#include <nacl/crypto_stream.h>
+#include <nacl/crypto_auth.h>
+#include <nacl/crypto_sign.h>
 #include "libmysmartgrid/error.h"
 
 using namespace libmsg;
@@ -66,26 +67,7 @@ std::string Secret::token() const {
 
 const std::string Webclient::digest_message(const std::string& data, const std::string& key) {
 
-    HMAC_CTX context;
-    HMAC_CTX_init(&context);
-    HMAC_Init_ex(&context, key.c_str(), key.length(), EVP_sha1(), NULL);
-    HMAC_Update(&context, (const unsigned char*) data.c_str(), data.length());
-
-    unsigned char out[EVP_MAX_MD_SIZE];
-    unsigned int len = EVP_MAX_MD_SIZE;
-
-    HMAC_Final(&context, out, &len);
-
-    std::stringstream oss;
-    oss << std::hex;
-    for (size_t i = 0; i < len; i++) {
-        oss << std::setw(2) << std::setfill('0') << (unsigned int) out[i];
-    }
-    oss << std::dec;
-
-    HMAC_CTX_cleanup(&context);
-
-    return oss.str().substr(0, 255);
+    return crypto_sign(data, key);
 }
 
 /* Store curl responses in memory. Curl needs a custom callback for that. Otherwise it tries to write the response to a file. */

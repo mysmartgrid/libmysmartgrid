@@ -6,7 +6,7 @@ install(FILES ${msg_hdrs} DESTINATION include/libmysmartgrid)
 include_directories(${CMAKE_SOURCE_DIR}
                     ${CURL_INCLUDE_DIR}
                     ${JSONCPP_INCLUDE_DIR}
-                    ${OPENSSL_INCLUDE_DIR}
+                    ${NACL_INCLUDE_DIR}
 )
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
@@ -19,7 +19,7 @@ target_link_libraries(mysmartgrid
   ${Boost_LIBRARIES}
   ${CURL_LIBRARIES}
   ${JSONCPP_LIBRARY}
-  ${OPENSSL_CRYPTO_LIBRARY}
+  ${NACL_STATIC_LIBRARIES}
 )
 
 install(TARGETS mysmartgrid 

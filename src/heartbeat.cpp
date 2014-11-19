@@ -24,16 +24,16 @@
 #include <libmysmartgrid/error.h>
 
 int main(int argc, char* argv[]) {
-	Json::Value *value = new Json::Value(Json::objectValue);
-	(*value)["key"] = "644bc984759564991ccabe7f9fcb801a";
-	(*value)["uptime"] = 0;
-	(*value)["version"] = 0;
+    Json::Value *value = new Json::Value(Json::objectValue);
+    (*value)["key"] = "644bc984759564991ccabe7f9fcb801a";
+    (*value)["uptime"] = 0;
+    (*value)["version"] = 0;
 
-	try {
-		std::string url = libmsg::Webclient::composeDeviceUrl("https://dev3-api.mysmartgrid.de:8443/", "ae44fe656e58a43284995e5db583b378");
-		libmsg::JsonPtr v = libmsg::Webclient::performHttpPost(url, libmsg::Secret::fromKey("644bc984759564991ccabe7f9fcb801a"), libmsg::JsonPtr(value));
-		std::cout << "Result: " << *v << std::endl;
-	} catch ( const libmsg::GenericException& e ) {
-		std::cout << "Error during request: " << e.what();
-	}
+    try {
+        std::string url = libmsg::Webclient::composeDeviceUrl("https://dev3-api.mysmartgrid.de:8443/", "ae44fe656e58a43284995e5db583b378");
+        libmsg::JsonPtr v = libmsg::Webclient::performHttpPost(url, libmsg::Secret::fromKey("644bc984759564991ccabe7f9fcb801a"), libmsg::JsonPtr(value));
+        std::cout << "Result: " << *v << std::endl;
+    } catch (const libmsg::GenericException& e) {
+        std::cout << "Error during request: " << e.what();
+    }
 }

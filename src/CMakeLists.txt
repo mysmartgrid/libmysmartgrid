@@ -5,6 +5,7 @@ set(heartbeat_src heartbeat.cpp)
 include_directories(${CMAKE_SOURCE_DIR}
                     ${CMAKE_CURRENT_SOURCE_DIR}
                     ${CURL_INCLUDE_DIR}
+                    ${NACL_INCLUDE_DIR}
                     ${JSONCPP_INCLUDE_DIR}
 )
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
@@ -12,8 +13,8 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 add_executable(get-sensor ${get-sensor_src})
 add_executable(heartbeat ${heartbeat_src})
 
-target_link_libraries(get-sensor mysmartgrid)
-target_link_libraries(heartbeat mysmartgrid)
+target_link_libraries(get-sensor mysmartgrid ${NACL_STATIC_LIBRARIES})
+target_link_libraries(heartbeat mysmartgrid ${NACL_STATIC_LIBRARIES})
 
 INSTALL(PROGRAMS 
   ${CMAKE_CURRENT_BINARY_DIR}/get-sensor

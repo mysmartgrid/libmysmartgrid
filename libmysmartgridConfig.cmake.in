@@ -18,11 +18,11 @@ get_filename_component(_libmysmartgrid_base_dir "${_libmysmartgrid_base_dir}" PA
 
 set(@UPPER_PROJECT_NAME@_INCLUDE_DIR  "${_libmysmartgrid_base_dir}/include")
 set(@UPPER_PROJECT_NAME@_INCLUDE_DIRS "${LIBMYSMARTGRID_INCLUDE_DIR}" "@CMAKE_DIR@"
-                    "@CURL_INCLUDE_DIR@" "@JSONCPP_INCLUDE_DIR@" "@OPENSSL_INCLUDE_DIR@")
+                    "@CURL_INCLUDE_DIR@" "@JSONCPP_INCLUDE_DIR@" "@NACL_INCLUDE_DIR@")
 set(@UPPER_PROJECT_NAME@_LIB_DIR      "@CMAKE_LIB_DIR@")
 set(@UPPER_PROJECT_NAME@_LIBRARIES    "@CURL_LIBRARIES@"
   "@JSONCPP_LIBRARY@"
-  "@OPENSSL_CRYPTO_LIBRARY@"
+  "@NACL_CRYPTO_LIBRARY@"
 )
 set(@UPPER_PROJECT_NAME@_CONFIG_DIR   "@CMAKE_CONFIG_DIR@")
 

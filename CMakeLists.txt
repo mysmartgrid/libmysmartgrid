@@ -104,7 +104,16 @@ else()
 		include(FindCurl)
 		#include(FindGnutls)
 	endif(WIN32)
-	find_package(OpenSSL)
+
+	# NaCl
+	IF(WIN32)
+		add_definitions(-DNACL_STATICLIB)
+		include(FindNaCl_WIN32)
+	else(WIN32)
+		#  add_definitions(-DNACL_STATICLIB)
+		include(FindNaCl)
+	endif(WIN32)
+
 endif( NOT JSONCPP_FOUND)
 
 include_directories(${CMAKE_BINARY_DIR})
