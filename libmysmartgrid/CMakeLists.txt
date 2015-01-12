@@ -12,7 +12,7 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 file(GLOB msg_src *.cpp *.hpp)
 
-ADD_LIBRARY(mysmartgrid SHARED ${msg_src}
+ADD_LIBRARY(mysmartgrid STATIC ${msg_src}
   )
 
 target_link_libraries(mysmartgrid
@@ -24,4 +24,5 @@ target_link_libraries(mysmartgrid
 
 install(TARGETS mysmartgrid 
   EXPORT ${PROJECT_NAME}Exports
-  LIBRARY DESTINATION lib)
+  ARCHIVE DESTINATION lib
+  COMPONENT static-libraries)
