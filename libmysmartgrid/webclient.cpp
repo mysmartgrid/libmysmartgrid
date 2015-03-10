@@ -19,17 +19,20 @@
  * along with libklio. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "webclient.h"
-#include "libmysmartgrid/error.h"
-#include <curl/curl.h>
 #include <sstream>
 #include <iomanip>
+
+#include <curl/curl.h>
 #include <openssl/hmac.h>
+
+#include "libmysmartgrid/error.h"
+#include "webclient.h"
 
 using namespace libmsg;
 
-Webclient::Webclient() {}
-Webclient::~Webclient() {}
+const std::string Webclient::GET = "GET";
+const std::string Webclient::POST = "POST";
+const std::string Webclient::DELETE = "DELETE";
 
 Secret Secret::fromKey(const std::string& key) {
 	Secret s;
@@ -59,8 +62,7 @@ std::string Secret::token() const {
 	throw GenericException("Token requested from secret that is no token");
 }
 
-const std::string Webclient::digest_message(const std::string& data, const std::string& key)
-{
+const std::string Webclient::digest_message(const std::string& data, const std::string& key) {
 	HMAC_CTX context;
 	HMAC_CTX_init(&context);
 	HMAC_Init_ex(&context, key.c_str(), key.length(), EVP_sha1(), NULL);
@@ -126,8 +128,7 @@ Webclient::Reading Webclient::getLastReading(const std::string& url, const std::
 	return std::make_pair(0, 0.0);
 }
 
-JsonPtr Webclient::performHttpRequest(const std::string& method, const std::string& url, const Secret& secret, const JsonPtr& body)
-{
+JsonPtr Webclient::performHttpRequest(const std::string& method, const std::string& url, const Secret& secret, const JsonPtr& body) {
 	long int httpCode = 0;
 	CURLcode curlCode;
 	std::string response = "";
@@ -176,7 +177,7 @@ JsonPtr Webclient::performHttpRequest(const std::string& method, const std::stri
 		}
 		headers = curl_slist_append(headers, oss.str().c_str());
 
-		if (method == "POST") {
+		if (method == POST) {
 			headers = curl_slist_append(headers, "Content-type: application/json");
 
 			oss.str(std::string());
@@ -241,28 +242,23 @@ JsonPtr Webclient::performHttpRequest(const std::string& method, const std::stri
 	throw GenericException("This point should never be reached.");
 }
 
-JsonPtr Webclient::performHttpGet(const std::string& url, const Secret& secret)
-{
-	return performHttpRequest("GET", url, secret);
+JsonPtr Webclient::performHttpGet(const std::string& url, const Secret& secret) {
+	return performHttpRequest(GET, url, secret);
 }
 
-JsonPtr Webclient::performHttpPost(const std::string& url, const Secret& secret, const JsonPtr& body)
-{
-	return performHttpRequest("POST", url, secret, body);
+JsonPtr Webclient::performHttpPost(const std::string& url, const Secret& secret, const JsonPtr& body) {
+	return performHttpRequest(POST, url, secret, body);
 }
 
-JsonPtr Webclient::performHttpDelete(const std::string& url, const Secret& secret)
-{
-	return performHttpRequest("DELETE", url, secret);
+JsonPtr Webclient::performHttpDelete(const std::string& url, const Secret& secret) {
+	return performHttpRequest(DELETE, url, secret);
 }
 
-const std::string Webclient::composeDeviceUrl(const std::string& url, const std::string& id)
-{
+const std::string Webclient::composeDeviceUrl(const std::string& url, const std::string& id) {
 	return composeUrl(url, std::string("device"), id);
 }
 
-const std::string Webclient::composeSensorUrl(const std::string& url, const std::string& sensorId, const ParamList& params)
-{
+const std::string Webclient::composeSensorUrl(const std::string& url, const std::string& sensorId, const ParamList& params) {
 	std::stringstream oss;
 	const char* seperator = "";
 
@@ -275,8 +271,7 @@ const std::string Webclient::composeSensorUrl(const std::string& url, const std:
 	return composeUrl(url, std::string("sensor"), sensorId, oss.str());
 }
 
-const std::string Webclient::composeUrl(const std::string& url, const std::string& object, const std::string& id, const std::string& query)
-{
+const std::string Webclient::composeUrl(const std::string& url, const std::string& object, const std::string& id, const std::string& query) {
 	std::ostringstream oss;
 	oss << url << "/" << object << "/" << id;
 	if (!query.empty())

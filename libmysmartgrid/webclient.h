@@ -55,8 +55,8 @@ namespace libmsg {
 			typedef std::map<std::string, std::string> ParamList;
 			typedef std::pair<int, double> Reading;
 			typedef std::vector<std::pair<int, double> > ReadingList;
-			Webclient();
-			~Webclient();
+			Webclient() {};
+			~Webclient() {};
 
 			static ReadingList getReadings(const std::string& url, const std::string& id, const Secret& secret, const std::string& unit = "watt");
 			static Reading getLastReading(const std::string& url, const std::string& id, const Secret& secret, const std::string& unit = "watt");
@@ -75,6 +75,11 @@ namespace libmsg {
 
 			static const std::string digest_message(const std::string& data, const std::string& key);
 			static size_t curlWriteCustomCallback(char *ptr, size_t size, size_t nmemb, void *data);
+
+		private:
+			static const std::string GET;
+			static const std::string POST;
+			static const std::string DELETE;
 	};
 }
 
