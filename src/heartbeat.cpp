@@ -23,7 +23,7 @@
 #include <libmysmartgrid/webclient.h>
 #include <libmysmartgrid/error.h>
 
-int main(int argc, char* argv[]) {
+int main() {
 	Json::Value *value = new Json::Value(Json::objectValue);
 	(*value)["key"] = "644bc984759564991ccabe7f9fcb801a";
 	(*value)["uptime"] = 0;

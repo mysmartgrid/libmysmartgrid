@@ -22,7 +22,7 @@
 #include <iostream>
 #include <libmysmartgrid/webclient.h>
 
-int main(int argc, char* argv[]) {
+int main() {
 	libmsg::Webclient w;
 	{
 		try {
