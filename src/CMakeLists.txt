@@ -12,8 +12,8 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 add_executable(get-sensor ${get-sensor_src})
 add_executable(heartbeat ${heartbeat_src})
 
-target_link_libraries(get-sensor mysmartgrid)
-target_link_libraries(heartbeat mysmartgrid)
+target_link_libraries(get-sensor mysmartgrid dl)
+target_link_libraries(heartbeat mysmartgrid dl)
 
 INSTALL(PROGRAMS 
   ${CMAKE_CURRENT_BINARY_DIR}/get-sensor
