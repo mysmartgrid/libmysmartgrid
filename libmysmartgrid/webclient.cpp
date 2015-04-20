@@ -19,20 +19,50 @@
  * along with libklio. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "webclient.h"
-#include "libmysmartgrid/error.h"
-#include <curl/curl.h>
 #include <sstream>
 #include <iomanip>
+
+#include <curl/curl.h>
 #include <openssl/hmac.h>
+
+#include "libmysmartgrid/error.h"
+#include "webclient.h"
 
 using namespace libmsg;
 
-Webclient::Webclient() {}
-Webclient::~Webclient() {}
+const std::string Webclient::GET = "GET";
+const std::string Webclient::POST = "POST";
+const std::string Webclient::DELETE = "DELETE";
 
-const std::string Webclient::digest_message(const std::string& data, const std::string& key)
-{
+Secret Secret::fromKey(const std::string& key) {
+	Secret s;
+	s._type = SecretType::Key;
+	s._secret = key;
+	return s;
+};
+
+Secret Secret::fromToken(const std::string& token) {
+	Secret s;
+	s._type = SecretType::Token;
+	s._secret = token;
+	return s;
+};
+
+std::string Secret::key() const {
+	if (_type == SecretType::Key) {
+		return _secret;
+	}
+	throw GenericException("Key requested from secret that is no key");
+}
+
+std::string Secret::token() const {
+	if (_type == SecretType::Token) {
+		return _secret;
+	}
+	throw GenericException("Token requested from secret that is no token");
+}
+
+const std::string Webclient::digest_message(const std::string& data, const std::string& key) {
 	HMAC_CTX context;
 	HMAC_CTX_init(&context);
 	HMAC_Init_ex(&context, key.c_str(), key.length(), EVP_sha1(), NULL);
@@ -66,12 +96,12 @@ size_t Webclient::curlWriteCustomCallback(char *ptr, size_t size, size_t nmemb, 
 	return realsize;
 }
 
-Webclient::ReadingList Webclient::getReadings(const std::string& url, const std::string& id, const std::string& token, const std::string& unit) {
+Webclient::ReadingList Webclient::getReadings(const std::string& url, const std::string& id, const Secret& secret, const std::string& unit) {
 	libmsg::Webclient::ParamList p;
 	p["interval"] = "hour";
 	p["unit"] = unit;
 	std::string sensorUrl = libmsg::Webclient::composeSensorUrl(url, id, p);
-	libmsg::JsonPtr result = libmsg::Webclient::performHttpGetToken(sensorUrl , token);
+	libmsg::JsonPtr result = libmsg::Webclient::performHttpGet(sensorUrl , secret);
 
 	ReadingList readings;
 	for (auto it = result->begin(), end = result->end(); it != end; ++it) {
@@ -85,57 +115,20 @@ Webclient::ReadingList Webclient::getReadings(const std::string& url, const std:
 	return readings;
 }
 
-Webclient::ReadingList Webclient::getReadingsKey(const std::string& url, const std::string& id, const std::string& key, const std::string& unit) {
-	libmsg::Webclient::ParamList p;
-	p["interval"] = "hour";
-	p["unit"] = unit;
-	std::string sensorUrl = libmsg::Webclient::composeSensorUrl(url, id, p);
-	libmsg::JsonPtr result = libmsg::Webclient::performHttpGet(sensorUrl , key);
+Webclient::Reading Webclient::getLastReading(const std::string& url, const std::string& id, const Secret& secret, const std::string& unit) {
+	ReadingList list = getReadings(url, id, secret, unit);
+	// TODO: Do we have to ensure here that the list is sorted by ascending timestamp? Or is that guaranteed by the api?
+	auto it = list.rbegin(), end = list.rend();
+	while ( it != end && it->second == 0 )
+		it++;
 
-	ReadingList readings;
-	for (auto it = result->begin(), end = result->end(); it != end; ++it) {
-		Json::Value timestamp = (*it)[0];
-		Json::Value value = (*it)[1];
-		if (value.isConvertibleTo(Json::realValue)) {
-			readings.push_back(std::make_pair(timestamp.asInt(), value.asDouble()));
-		}
+	if ( it != end ) {
+		return *it;
 	}
-
-	return readings;
+	return std::make_pair(0, 0.0);
 }
 
-Webclient::Reading Webclient::getLastReading(const std::string& url, const std::string& id, const std::string& token, const std::string& unit) {
-	ReadingList list = getReadings(url, id, token, unit);
-	Reading result = std::make_pair(0, 0);
-	for (auto it = list.begin(), end = list.end(); it != end; ++it) {
-		if (it->first > result.first)
-			result = *it;
-	}
-	return result;
-}
-
-Webclient::Reading Webclient::getLastReadingKey(const std::string& url, const std::string& id, const std::string& key, const std::string& unit) {
-	ReadingList list = getReadingsKey(url, id, key, unit);
-	Reading result = std::make_pair(0, 0);
-	for (auto it = list.begin(), end = list.end(); it != end; ++it) {
-		if (it->first > result.first)
-			result = *it;
-	}
-	return result;
-}
-
-boost::shared_ptr<Json::Value> Webclient::performHttpRequest(const std::string& method, const std::string& url, const std::string& token)
-{
-	return performHttpRequest(method, url, token, "", boost::shared_ptr<Json::Value>(new Json::Value()));
-}
-
-JsonPtr Webclient::performHttpRequest(const std::string& method, const std::string& url, const std::string& key, const JsonPtr& body)
-{
-	return performHttpRequest(method, url, "", key, body);
-}
-
-JsonPtr Webclient::performHttpRequest(const std::string& method, const std::string& url, const std::string& token, const std::string& key, const JsonPtr& body)
-{
+JsonPtr Webclient::performHttpRequest(const std::string& method, const std::string& url, const Secret& secret, const JsonPtr& body) {
 	long int httpCode = 0;
 	CURLcode curlCode;
 	std::string response = "";
@@ -177,14 +170,14 @@ JsonPtr Webclient::performHttpRequest(const std::string& method, const std::stri
 			strbody = w.write(*body);
 		}
 		std::ostringstream oss;
-		if (!key.empty()) {
-			oss << "X-Digest: " << digest_message(strbody, key);
+		if (secret.isKey()) {
+			oss << "X-Digest: " << digest_message(strbody, secret.key());
+		} else if (secret.isToken()) {
+			oss << "X-Token: " << secret.token();
 		}
-		if (!token.empty())
-			oss << "X-Token: " << token;
 		headers = curl_slist_append(headers, oss.str().c_str());
 
-		if (method == "POST") {
+		if (method == POST) {
 			headers = curl_slist_append(headers, "Content-type: application/json");
 
 			oss.str(std::string());
@@ -249,33 +242,23 @@ JsonPtr Webclient::performHttpRequest(const std::string& method, const std::stri
 	throw GenericException("This point should never be reached.");
 }
 
-JsonPtr Webclient::performHttpGetToken(const std::string& url, const std::string& token)
-{
-	return performHttpRequest("GET", url, token);
+JsonPtr Webclient::performHttpGet(const std::string& url, const Secret& secret) {
+	return performHttpRequest(GET, url, secret);
 }
 
-JsonPtr Webclient::performHttpGet(const std::string& url, const std::string& key)
-{
-	return performHttpRequest("GET", url, key, JsonPtr(new Json::Value()));
+JsonPtr Webclient::performHttpPost(const std::string& url, const Secret& secret, const JsonPtr& body) {
+	return performHttpRequest(POST, url, secret, body);
 }
 
-JsonPtr Webclient::performHttpPost(const std::string& url, const std::string& key, const JsonPtr& body)
-{
-	return performHttpRequest("POST", url, key, body);
+JsonPtr Webclient::performHttpDelete(const std::string& url, const Secret& secret) {
+	return performHttpRequest(DELETE, url, secret);
 }
 
-JsonPtr Webclient::performHttpDelete(const std::string& url, const std::string& key)
-{
-	return performHttpRequest("DELETE", url, key, JsonPtr(new Json::Value()));
-}
-
-const std::string Webclient::composeDeviceUrl(const std::string& url, const std::string& id)
-{
+const std::string Webclient::composeDeviceUrl(const std::string& url, const std::string& id) {
 	return composeUrl(url, std::string("device"), id);
 }
 
-const std::string Webclient::composeSensorUrl(const std::string& url, const std::string& sensorId, const ParamList& params)
-{
+const std::string Webclient::composeSensorUrl(const std::string& url, const std::string& sensorId, const ParamList& params) {
 	std::stringstream oss;
 	const char* seperator = "";
 
@@ -288,8 +271,7 @@ const std::string Webclient::composeSensorUrl(const std::string& url, const std:
 	return composeUrl(url, std::string("sensor"), sensorId, oss.str());
 }
 
-const std::string Webclient::composeUrl(const std::string& url, const std::string& object, const std::string& id, const std::string& query)
-{
+const std::string Webclient::composeUrl(const std::string& url, const std::string& object, const std::string& id, const std::string& query) {
 	std::ostringstream oss;
 	oss << url << "/" << object << "/" << id;
 	if (!query.empty())
